@@ -1,13 +1,13 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 '''
 === PREREQUISITES ===
-Run in Python 2
+Run in Python 3 or Python 2
 
 Install requests library, via macOS terminal:
 sudo pip install requests
 
-dash_vars.py has these two lines, with the API key from your Dashboard profile (upper-right email login > API access), and organization ID to call (https://dashboard.meraki.com/api/v0/organizations); separated into different file for security.
+login.py has these two lines, with the API key from your Dashboard profile (upper-right email login > API access), and organization ID to call (https://dashboard.meraki.com/api/v0/organizations); separated into different file for security.
 api_key = '[API_KEY]'
 org_id = '[ORG_ID]'
 
@@ -27,19 +27,26 @@ For load balancing, both WAN links would show active.
 For any questions, please contact Shiyue (Shay) Cheng, shiychen@cisco.com
 '''
 
-import csv, datetime, json, requests
+import csv
+import datetime
+import json
+import requests
 
 def get_network_name(network_id, networks):
     return [element for element in networks if network_id == element['id']][0]['name']
 
+
 if __name__ == '__main__':
-    # Import API key and org ID from vars.py
+    # Import API key and org ID from login.py
     try:
-        import dash_vars
-        (API_KEY, ORG_ID) = (dash_vars.api_key, dash_vars.org_id)
+        import login
+        (API_KEY, ORG_ID) = (login.api_key, login.org_id)
     except ImportError:
-        API_KEY = raw_input('Enter your Dashboard API key: ')
-        ORG_ID = raw_input('Enter your organization ID: ')
+        try: input = raw_input
+        except NameError: pass
+        API_KEY = input('Enter your Dashboard API key: ')
+        ORG_ID = input('Enter your organization ID: ')
+
 
     # Find all MX/Z1 networks
     session = requests.session()
@@ -50,15 +57,22 @@ if __name__ == '__main__':
     appliances = [device for device in inventory if device['model'][:2] in ('MX', 'Z1') and device['networkId'] is not None]
     devices = [device for device in inventory if device not in appliances and device['networkId'] is not None]
 
+
     # Output CSV of MX/Z1 appliances' info
     today = datetime.date.today()
     csv_file1 = open(name + ' MX & Z1 appliances -' + str(today) + '.csv', 'w')
     fieldnames = ['Network', 'Device', 'Serial', 'MAC', 'Model', 'WAN1 Status', 'WAN1 IP', 'WAN1 Gateway', 'WAN1 Public IP', 'WAN1 DNS', 'WAN1 Static', 'WAN2 Status', 'WAN2 IP', 'WAN2 Gateway', 'WAN2 Public IP', 'WAN2 DNS', 'WAN2 Static', 'Cellular Status', 'Cellular IP', 'Cellular Provider', 'Cellular Public IP', 'Cellular Model', 'Cellular Connection']
     writer = csv.DictWriter(csv_file1, fieldnames=fieldnames, restval='')
     writer.writeheader()
+
+    # Iterate through appliances
     for appliance in appliances:
         network_name = get_network_name(appliance['networkId'], networks)
         device_name = json.loads(session.get('https://dashboard.meraki.com/api/v0/networks/' + appliance['networkId'] + '/devices/' + appliance['serial'], headers=headers).text)['name']
+        try:
+            print('Found appliance ' + device_name)
+        except:
+            print('Found appliance ' + device['serial'])
         uplinks_info = dict.fromkeys(['WAN1', 'WAN2', 'Cellular'])
         uplinks_info['WAN1'] = dict.fromkeys(['interface', 'status', 'ip', 'gateway', 'publicIp', 'dns', 'usingStaticIp'])
         uplinks_info['WAN2'] = dict.fromkeys(['interface', 'status', 'ip', 'gateway', 'publicIp', 'dns', 'usingStaticIp'])
@@ -77,20 +91,30 @@ if __name__ == '__main__':
         writer.writerow({'Network': network_name, 'Device': device_name, 'Serial': appliance['serial'], 'MAC': appliance['mac'], 'Model': appliance['model'], 'WAN1 Status': uplinks_info['WAN1']['status'], 'WAN1 IP': uplinks_info['WAN1']['ip'], 'WAN1 Gateway': uplinks_info['WAN1']['gateway'], 'WAN1 Public IP': uplinks_info['WAN1']['publicIp'], 'WAN1 DNS': uplinks_info['WAN1']['dns'], 'WAN1 Static': uplinks_info['WAN1']['usingStaticIp'], 'WAN2 Status': uplinks_info['WAN2']['status'], 'WAN2 IP': uplinks_info['WAN2']['ip'], 'WAN2 Gateway': uplinks_info['WAN2']['gateway'], 'WAN2 Public IP': uplinks_info['WAN2']['publicIp'], 'WAN2 DNS': uplinks_info['WAN2']['dns'], 'WAN2 Static': uplinks_info['WAN2']['usingStaticIp'], 'Cellular Status': uplinks_info['Cellular']['status'], 'Cellular IP': uplinks_info['Cellular']['ip'], 'Cellular Provider': uplinks_info['Cellular']['provider'], 'Cellular Public IP': uplinks_info['Cellular']['publicIp'], 'Cellular Model': uplinks_info['Cellular']['model'], 'Cellular Connection': uplinks_info['Cellular']['connectionType']})
     csv_file1.close()
 
-    # OUtput CSV of all other devices' info
+
+    # Output CSV of all other devices' info
     csv_file2 = open(name + ' other devices -' + str(today) + '.csv', 'w')
     fieldnames = ['Network', 'Device', 'Serial', 'MAC', 'Model', 'Status', 'IP', 'Gateway', 'Public IP', 'DNS', 'VLAN', 'Static']
     writer = csv.DictWriter(csv_file2, fieldnames=fieldnames, restval='')
     writer.writeheader()
+
+    # Iterate through all other devices
     for device in devices:
         network_name = get_network_name(device['networkId'], networks)
         device_name = json.loads(session.get('https://dashboard.meraki.com/api/v0/networks/' + device['networkId'] + '/devices/' + device['serial'], headers=headers).text)['name']
+        try:
+            print('Found device ' + device_name)
+        except:
+            print('Found device ' + device['serial'])
         uplink_info = dict.fromkeys(['interface', 'status', 'ip', 'gateway', 'publicIp', 'dns', 'vlan', 'usingStaticIp'])
         uplink = json.loads(session.get('https://dashboard.meraki.com/api/v0/networks/' + device['networkId'] + '/devices/' + device['serial'] + '/uplink', headers=headers).text)
-        if uplink == []:    # blank uplink for devices that are down or meshed APs
+        
+        # Blank uplink for devices that are down or meshed APs
+        if uplink == []:
             continue
+        # All other devices have single uplink
         else:
-            uplink = uplink[0]  # other devices only have single uplink
+            uplink = uplink[0]
         for key in uplink.keys():
             uplink_info[key] = uplink[key]
         writer.writerow({'Network': network_name, 'Device': device_name, 'Serial': device['serial'], 'MAC': device['mac'], 'Model': device['model'], 'Status': uplink_info['status'], 'IP': uplink_info['ip'], 'Gateway': uplink_info['gateway'], 'Public IP': uplink_info['publicIp'], 'DNS': uplink_info['dns'], 'VLAN': uplink_info['vlan'], 'Static': uplink_info['usingStaticIp']})
