@@ -4,7 +4,7 @@ Iterates through all devices, and exports to two CSV files:
 * MX/Z1 networks to collect WAN uplink information
 * all other devices (MR, MS, MC, MV) with local uplink info.
      
-Possible statuses:  Possible statuses:
+Possible statuses:
 * Active - active and working WAN port
 * Ready - standby but working WAN port, not the preferred WAN port
 * Failed - was working at some point but not anymore
